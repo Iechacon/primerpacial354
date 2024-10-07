@@ -35,7 +35,7 @@ from google.colab import drive
 drive.mount("/content/drive")
 import pandas as pd
 import matplotlib.pyplot as plt
-data = pd.read_csv('/content/drive/MyDrive/parcial1/nivelestres.csv', index_col=1)
+data = pd.read_csv('/content/drive/MyDrive/parcial1/nivelestres.csv')
 mapa_genero = {'Male': 0, 'Female': 1}
 if 'gender' in data.columns:
     data['gender'] = [mapa_genero[val] if val in mapa_genero else val for val in data['gender']]
