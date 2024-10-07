@@ -10,102 +10,107 @@ Original file is located at
 #a. Con DEAP
 pip install deap
 
+
+from deap import base, creator, tools, algorithms
 import random
-from deap import base, creator, tools
 
-# Eliminar las clases creadas anteriormente si existen para evitar advertencias de duplicado
-if 'FitnessMax' in creator.__dict__:
-    del creator.FitnessMax
-if 'Individual' in creator.__dict__:
-    del creator.Individual
-
-# Definir la función objetivo: f(x) = x^(2x) - 1
-def funcion_objetivo(individuo):
-    x = individuo[0]  # El individuo es una lista con un valor de x
-    try:
-        return (x ** (2 * x)) - 1,
-    except OverflowError:
-        return float('inf')  # Controlar valores muy grandes
-
-# Crear la estructura del problema: Maximización del fitness
+# Definir la estructura del problema de maximización del fitness
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("Individual", list, fitness=creator.FitnessMax)
 
-# Definir el Toolbox para los operadores genéticos
+# Configurar el toolbox
 toolbox = base.Toolbox()
-valores_iniciales = [13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2]
 
-# Definir cómo se crea un individuo a partir de los valores iniciales
-toolbox.register("attr_value", lambda: random.choice(valores_iniciales))
-toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_value, n=1)
-
-# Crear la población correctamente con initRepeat para listas de individuos
+# Atributos y población
+toolbox.register("attr_int", random.randint, 0, 1)  # Atributo para crear bits (0 y 1)
+toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_int, n=8)  # Crear individuos de 8 bits
 toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
-# Registrar la función de evaluación correctamente
-toolbox.register("evaluate", funcion_objetivo)
+# Función de evaluación
+def funcion_evaluacion(individual):
+    # Convertir de binario a decimal
+    decimal_value = int("".join(map(str, individual)), 2)
+    try:
+        return (decimal_value ** (2 * decimal_value) - 1.0),
+    except OverflowError:
+        return float('-inf'),
 
-# **Registrar la función de selección en el toolbox**
-toolbox.register("select", tools.selTournament, tournsize=3)  # Selección por torneo con tamaño 3
+toolbox.register("evaluate", funcion_evaluacion)
+
+# Definir operadores genéticos personalizados (cruce en un punto específico y mutación en un bit específico)
+def custom_crossover(ind1, ind2, punto_de_cruce):
+    """
+    Realiza cruce en un punto específico.
+    """
+    # Realizar el cruce en el punto especificado
+    ind1[punto_de_cruce:], ind2[punto_de_cruce:] = ind2[punto_de_cruce:], ind1[punto_de_cruce:]
+    return ind1, ind2
+
+def custom_mutation(individual, indice_mutacion):
+    """
+    Realiza la mutación en un bit específico.
+    """
+    # Invertir el bit en el índice especificado
+    individual[indice_mutacion] = 1 - individual[indice_mutacion]
+    return individual,
+
+# Registrar operadores personalizados en el toolbox
+toolbox.register("mate", custom_crossover, punto_de_cruce=3)  # Cruzar en el tercer índice
+toolbox.register("mutate", custom_mutation, indice_mutacion=4)  # Mutar en el cuarto índice
+toolbox.register("select", tools.selTournament, tournsize=3)
 
 # Crear la población inicial
-poblacion = toolbox.population(n=len(valores_iniciales))  # Crear la población basada en la longitud de valores_iniciales
+poblacion_inicial = toolbox.population(n=12)
 
-# Definir los parámetros del algoritmo genético
-prob_cruzamiento = 0.5  # Probabilidad de cruzamiento
-prob_mutacion = 0.2     # Probabilidad de mutación
-numero_generaciones = 3
+# Algoritmo evolutivo con operadores específicos para cada generación
+NGEN = 3  # Número de generaciones
 
-# Controlar los puntos de cruce y mutación por cada generación
-puntos_cruce = [4, 3, 2]  # Puntos de cruce por generación
-bits_mutacion = [3, 6, 5]  # Bits de mutación por generación
+# Definir diferentes puntos de cruce y mutación para cada generación
+puntos_de_cruce = [3, 4, 2]  # Puntos de cruce por generación
+puntos_de_mutacion = [4, 6, 5]  # Puntos de mutación por generación
 
-# Función para aplicar cruce y mutación con puntos específicos
-def aplicar_cruce_mutacion(toolbox, poblacion, punto_cruce, bit_mutacion):
-    # Aplicar el cruzamiento en el punto especificado
-    for i in range(1, len(poblacion), 2):
-        # Cruzar pares de individuos si tienen más de un elemento
-        if len(poblacion[i - 1]) > 1 and len(poblacion[i]) > 1:
-            tools.cxOnePoint(poblacion[i - 1], poblacion[i])
-
-    # Aplicar la mutación en el bit especificado
-    for individuo in poblacion:
-        # Cambiar el bit específico de la estructura de individuo
-        bin_value = format(individuo[0], '08b')
-        lista_bits = list(bin_value)
-        # Realizar la mutación en el bit especificado
-        lista_bits[bit_mutacion] = '1' if lista_bits[bit_mutacion] == '0' else '0'
-        # Convertir el binario mutado a decimal
-        individuo[0] = int(''.join(lista_bits), 2)
-
-# Función para evaluar manualmente los valores de aptitud
-def evaluar_fitness(poblacion):
-    for ind in poblacion:
-        ind.fitness.values = funcion_objetivo(ind)  # Remove the extra comma to assign a tuple of numbers
-
-# Evolucionar a lo largo de las generaciones especificadas
-for gen in range(numero_generaciones):
+for gen in range(NGEN):
     print(f"\n--- Generación {gen + 1} ---")
+    
+    # Cambiar el punto de cruce y mutación para esta generación
+    toolbox.unregister("mate")
+    toolbox.unregister("mutate")
+    toolbox.register("mate", custom_crossover, punto_de_cruce=puntos_de_cruce[gen])
+    toolbox.register("mutate", custom_mutation, indice_mutacion=puntos_de_mutacion[gen])
+    
+    # Evaluar la población actual
+    fitnesses = list(map(toolbox.evaluate, poblacion_inicial))
+    for ind, fit in zip(poblacion_inicial, fitnesses):
+        ind.fitness.values = fit
 
-    # Evaluar manualmente cada individuo en la población
-    evaluar_fitness(poblacion)
+    # Selección de la próxima generación
+    offspring = toolbox.select(poblacion_inicial, len(poblacion_inicial))
+    offspring = list(map(toolbox.clone, offspring))
 
-    # Aplicar selección usando la función registrada en el toolbox
-    poblacion = toolbox.select(poblacion, len(poblacion))
+    # Aplicar cruzamiento y mutación según las probabilidades
+    for child1, child2 in zip(offspring[::2], offspring[1::2]):
+        if random.random() < 0.5:  # Probabilidad de cruce 50%
+            toolbox.mate(child1, child2)
+            del child1.fitness.values
+            del child2.fitness.values
 
-    # Aplicar cruce y mutación con los puntos específicos
-    aplicar_cruce_mutacion(toolbox, poblacion, puntos_cruce[gen], bits_mutacion[gen])
+    for mutant in offspring:
+        if random.random() < 0.2:  # Probabilidad de mutación 20%
+            toolbox.mutate(mutant)
+            del mutant.fitness.values
 
-    # Evaluar nuevamente la población
-    evaluar_fitness(poblacion)
+    # Evaluar individuos con fitness no calculado
+    invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+    fitnesses = map(toolbox.evaluate, invalid_ind)
+    for ind, fit in zip(invalid_ind, fitnesses):
+        ind.fitness.values = fit
 
-    # Mostrar la población y sus fitness después de cada generación
-    for ind in poblacion:
-        print(f"Individuo: {ind}, Fitness: {ind.fitness.values[0]}")
+    # Reemplazar la población actual por la descendencia
+    poblacion_inicial[:] = offspring
 
-# Seleccionar el mejor individuo después de todas las generaciones
-mejor_individuo = tools.selBest(poblacion, k=1)[0]
-print(f"\nMejor Individuo: {mejor_individuo}, Fitness: {mejor_individuo.fitness.values[0]}")
+    # Mostrar resultados de la generación actual
+    print(f"Evaluaciones: {[ind.fitness.values[0] for ind in poblacion_inicial]}")
+    print(f"Individuos: {[int(''.join(map(str, ind)), 2) for ind in poblacion_inicial]}")
 
 
 #########################################################################
